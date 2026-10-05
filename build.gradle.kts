@@ -1,7 +1,7 @@
 plugins {
 	id("maven-publish")
-	id("net.fabricmc.fabric-loom-remap") version "1.15.+"
-	id("ploceus") version "1.15.+"
+	id("net.fabricmc.fabric-loom-remap") version "1.18.+"
+	id("ploceus") version "1.18.+"
     id("com.modrinth.minotaur") version "2.+"
 }
 

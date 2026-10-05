@@ -6,7 +6,7 @@ import java.util.stream.Stream;
 import io.github.moehreag.soundfix.SoundFix;
 import io.github.moehreag.soundfix.subtitles.SubtitlesHud;
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.screen.SoundsScreen;
+import net.minecraft.client.gui.screen.menu.options.SoundsScreen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.options.GameOptions;
 import net.minecraft.client.resource.language.I18n;
