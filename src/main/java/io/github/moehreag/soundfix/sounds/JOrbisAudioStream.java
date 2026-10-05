@@ -94,7 +94,7 @@ public class JOrbisAudioStream implements FloatSampleSource {
 			int i = this.syncState.pageout(this.page);
 			switch (i) {
 				case PAGEOUT_RECAPTURE:
-					throw new IllegalStateException("Corrupt or missing data in bitstream");
+					throw new IOException("Corrupt or missing data in bitstream");
 				case PAGEOUT_NEED_MORE_DATA:
 					if (this.readToBuffer()) {
 						break;
