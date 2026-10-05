@@ -5,6 +5,8 @@ import java.util.concurrent.locks.LockSupport;
 import io.github.moehreag.soundfix.util.BlockableEventLoop;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.minecraft.client.Minecraft;
+import net.minecraft.util.crash.CrashReport;
 
 /**
  * The SoundEngineExecutor class is responsible for executing sound-related tasks in a separate thread.
@@ -29,6 +31,9 @@ public class SoundEngineExecutor extends BlockableEventLoop<Runnable> {
 		Thread thread = new Thread(this::run);
 		thread.setDaemon(true);
 		thread.setName("Sound engine");
+		thread.setUncaughtExceptionHandler(
+			(t, throwable) -> Minecraft.getInstance().integratedServerCrashed(CrashReport.of(throwable, "Uncaught exception on thread: " + t.getName()))
+		);
 		thread.start();
 		return thread;
 	}
@@ -36,6 +41,13 @@ public class SoundEngineExecutor extends BlockableEventLoop<Runnable> {
 	@Override
 	public Runnable wrapRunnable(Runnable runnable) {
 		return runnable;
+	}
+
+	@Override
+	public void schedule(Runnable runnable) {
+		if (!this.shutdown) {
+			super.schedule(runnable);
+		}
 	}
 
 	@Override
@@ -64,11 +76,12 @@ public class SoundEngineExecutor extends BlockableEventLoop<Runnable> {
 	}
 
 	/**
-	 * Flushes the SoundEngineExecutor by interrupting the thread, joining the thread, dropping all pending tasks, and recreating the thread.
-	 * It sets the shutdown state to false to allow new tasks to be scheduled.
+	 * Shuts down the SoundEngineExecutor by dropping all pending tasks, interrupting the thread and joining it.
+	 * Tasks scheduled while shut down are ignored.
 	 */
-	public void flush() {
+	public void shutDown() {
 		this.shutdown = true;
+		this.dropAllTasks();
 		this.thread.interrupt();
 
 		try {
@@ -76,8 +89,12 @@ public class SoundEngineExecutor extends BlockableEventLoop<Runnable> {
 		} catch (InterruptedException var2) {
 			Thread.currentThread().interrupt();
 		}
+	}
 
-		this.dropAllTasks();
+	/**
+	 * Starts a new thread after {@link #shutDown()}, allowing new tasks to be scheduled again.
+	 */
+	public void startUp() {
 		this.shutdown = false;
 		this.thread = this.createThread();
 	}
