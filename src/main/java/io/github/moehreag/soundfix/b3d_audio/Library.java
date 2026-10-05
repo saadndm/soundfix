@@ -77,10 +77,8 @@ public class Library {
 		} else if (!aLCCapabilities.OpenALC11) {
 			throw new IllegalStateException("OpenAL 1.1 not supported");
 		} else {
-			this.setHrtf(aLCCapabilities.ALC_SOFT_HRTF && enableHrtf);
-
 			try (MemoryStack memoryStack = MemoryStack.stackPush()) {
-				IntBuffer intBuffer = memoryStack.callocInt(3).put(6554).put(1).put(0).flip();
+				IntBuffer intBuffer = this.createAttributes(memoryStack, aLCCapabilities.ALC_SOFT_HRTF && enableHrtf);
 				this.context = ALC10.alcCreateContext(this.currentDevice, intBuffer);
 			}
 
@@ -112,20 +110,22 @@ public class Library {
 	}
 
 	/**
-	 * Sets the HRTF (head-related transfer function) for spatial audio, if it is supported by the current device.
+	 * Creates the context attribute list, including the HRTF (head-related transfer function) settings if the current device supports them.
 	 *
+	 * @param stack      The stack to allocate the attribute list on.
 	 * @param enableHrtf Whether to enable HRTF.
+	 * @return The zero-terminated attribute list.
 	 */
-	private void setHrtf(boolean enableHrtf) {
-		int i = ALC10.alcGetInteger(this.currentDevice, 6548);
-		if (i > 0) {
-			try (MemoryStack memoryStack = MemoryStack.stackPush()) {
-				IntBuffer intBuffer = memoryStack.callocInt(10).put(6546).put(enableHrtf ? 1 : 0).put(6550).put(0).put(0).flip();
-				if (!SOFTHRTF.alcResetDeviceSOFT(this.currentDevice, intBuffer)) {
-					LOGGER.warn("Failed to reset device: {}", new Object[]{ALC10.alcGetString(this.currentDevice, ALC10.alcGetError(this.currentDevice))});
-				}
-			}
+	private IntBuffer createAttributes(MemoryStack stack, boolean enableHrtf) {
+		IntBuffer attr = stack.callocInt(11);
+		int numHrtf = ALC10.alcGetInteger(this.currentDevice, 6548);
+		if (numHrtf > 0) {
+			attr.put(6546).put(enableHrtf ? 1 : 0);
+			attr.put(6550).put(0);
 		}
+
+		attr.put(6554).put(1);
+		return attr.put(0).flip();
 	}
 
 	/**
