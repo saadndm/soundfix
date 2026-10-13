@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(GameGui.class)
 public class GuiMixin {
 
-	@Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/ClientPlayerInteractionManager;hidesGui()Z", ordinal = 0))
+	@Inject(method = "render", at = @At("TAIL"))
 	private void renderSubtitleHud(float tickDelta, CallbackInfo ci) {
 		SubtitlesHud.getInstance().render();
 	}
