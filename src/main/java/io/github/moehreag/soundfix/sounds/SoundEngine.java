@@ -85,6 +85,7 @@ public class SoundEngine {
 	private DeviceList lastSeenDevices;
 	private final DeviceTracker deviceTracker = Library.createDeviceTracker();
 	private final Map<SoundInstance, ChannelAccess.ChannelHandle> instanceToChannel = Maps.newHashMap();
+	private final Map<SoundInstance, Sound> instanceToSound = Maps.newHashMap();
 	private final Multimap<SoundCategory, SoundInstance> instanceBySource = HashMultimap.create();
 	/**
 	 * A subset of playingSounds, this contains only {@linkplain TickableSoundInstance}
@@ -177,7 +178,7 @@ public class SoundEngine {
 				this.listener.setGain(volume);
 			} else {
 				this.instanceToChannel.forEach((instance, source) -> {
-					float f = this.calculateVolume(instance);
+					float f = this.calculateVolume(instance, this.instanceToSound.get(instance));
 					source.execute(channel -> {
 						if (f <= 0.0F) {
 							channel.stop();
@@ -224,7 +225,8 @@ public class SoundEngine {
 		if (this.loaded) {
 			ChannelAccess.ChannelHandle channelHandle = this.instanceToChannel.get(soundInstance);
 			if (channelHandle != null) {
-				channelHandle.execute(channel -> channel.setVolume(volume * this.calculateVolume(soundInstance)));
+				float f = volume * this.calculateVolume(soundInstance, this.instanceToSound.get(soundInstance));
+				channelHandle.execute(channel -> channel.setVolume(f));
 			}
 		}
 	}
@@ -236,6 +238,7 @@ public class SoundEngine {
 		if (this.loaded) {
 			this.executor.shutDown();
 			this.instanceToChannel.clear();
+			this.instanceToSound.clear();
 			this.channelAccess.clear();
 			this.queuedSounds.clear();
 			this.tickingSounds.clear();
@@ -350,8 +353,9 @@ public class SoundEngine {
 			if (tickableSoundInstance.isStopped()) {
 				this.stop(tickableSoundInstance);
 			} else {
-				float f = this.calculateVolume(tickableSoundInstance);
-				float g = this.calculatePitch(tickableSoundInstance);
+				Sound sound = this.instanceToSound.get(tickableSoundInstance);
+				float f = this.calculateVolume(tickableSoundInstance, sound);
+				float g = this.calculatePitch(tickableSoundInstance, sound);
 				Vec3d vec3 = new Vec3d(tickableSoundInstance.getX(), tickableSoundInstance.getY(), tickableSoundInstance.getZ());
 				ChannelAccess.ChannelHandle channelHandle = this.instanceToChannel.get(tickableSoundInstance);
 				if (channelHandle != null) {
@@ -382,6 +386,7 @@ public class SoundEngine {
 					}
 
 					iterator.remove();
+					this.instanceToSound.remove(soundInstance);
 					LOGGER.debug(MARKER, "Removed channel {} because it's not playing anymore", new Object[]{channelHandle2});
 					this.soundDeleteTime.remove(soundInstance);
 
@@ -491,8 +496,8 @@ public class SoundEngine {
 						float f = sound.getVolume();
 						float g = Math.max(f, 1.0F) * 16;
 						SoundCategory soundSource = weighedSoundEvents.getCategory();
-						float h = this.calculateVolume(f, soundSource);
-						float i = this.calculatePitch(sound);
+						float h = this.calculateVolume(f * (float) sound2.getVolume(), soundSource);
+						float i = this.calculatePitch(sound, sound2);
 						SoundInstance.Attenuation attenuation = sound.getAttenuationType();
 						boolean bl = soundSource == SoundCategory.MASTER || soundSource == SoundCategory.MUSIC;//sound.isRelative();
 						if (h == 0.0F /*&& !sound.canStartSilent()*/) {
@@ -522,6 +527,7 @@ public class SoundEngine {
 									LOGGER.debug(MARKER, "Playing sound {} for event {}", new Object[]{sound2.getLocation(), resourceLocation});
 									this.soundDeleteTime.put(sound, this.tickCount + 20);
 									this.instanceToChannel.put(sound, channelHandle);
+									this.instanceToSound.put(sound, sound2);
 									this.instanceBySource.put(soundSource, sound);
 									channelHandle.execute(channel -> {
 										channel.setPitch(i);
@@ -582,10 +588,11 @@ public class SoundEngine {
 	 * <p>
 	 * Clamps the sound between 0.5f and 2.0f.
 	 *
-	 * @param sound the {@linkplain SoundInstance} being played
+	 * @param instance the {@linkplain SoundInstance} being played
+	 * @param sound    the {@linkplain Sound} chosen for the instance
 	 */
-	private float calculatePitch(SoundInstance sound) {
-		return MathHelper.clamp(sound.getPitch(), 0.5F, 2.0F);
+	private float calculatePitch(SoundInstance instance, Sound sound) {
+		return MathHelper.clamp(instance.getPitch() * (float) sound.getPitch(), 0.5F, 2.0F);
 	}
 
 	/**
@@ -593,8 +600,8 @@ public class SoundEngine {
 	 * <p>
 	 * Delegates to {@code #calculateVolume(float, SoundSource)}
 	 */
-	private float calculateVolume(SoundInstance sound) {
-		return this.calculateVolume(sound.getVolume(), soundManager.get(sound.getLocation()).getCategory());
+	private float calculateVolume(SoundInstance instance, Sound sound) {
+		return this.calculateVolume(instance.getVolume() * (float) sound.getVolume(), soundManager.get(instance.getLocation()).getCategory());
 	}
 
 	/**
