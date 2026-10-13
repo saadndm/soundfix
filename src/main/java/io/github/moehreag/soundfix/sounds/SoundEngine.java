@@ -177,16 +177,19 @@ public class SoundEngine {
 			if (category == SoundCategory.MASTER) {
 				this.listener.setGain(volume);
 			} else {
-				this.instanceToChannel.forEach((instance, source) -> {
-					float f = this.calculateVolume(instance, this.instanceToSound.get(instance));
-					source.execute(channel -> {
-						if (f <= 0.0F) {
-							channel.stop();
-						} else {
-							channel.setVolume(f);
-						}
-					});
-				});
+				for (SoundInstance instance : this.instanceBySource.get(category)) {
+					ChannelAccess.ChannelHandle source = this.instanceToChannel.get(instance);
+					if (source != null) {
+						float f = MathHelper.clamp(instance.getVolume() * (float) this.instanceToSound.get(instance).getVolume(), 0.0F, 1.0F) * volume;
+						source.execute(channel -> {
+							if (f <= 0.0F) {
+								channel.stop();
+							} else {
+								channel.setVolume(f);
+							}
+						});
+					}
+				}
 			}
 		}
 	}
