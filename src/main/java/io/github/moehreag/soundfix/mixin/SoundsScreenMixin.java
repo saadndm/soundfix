@@ -65,7 +65,7 @@ public abstract class SoundsScreenMixin extends Screen {
 			options.save();
 		}
 		if (button.id == 101 || button.id == 99) {
-			minecraft.getSoundManager().reload(minecraft.getResourceManager());
+			SoundFix.engine.reload();
 			button.playClickSound(minecraft.getSoundManager());
 			options.save();
 		}
