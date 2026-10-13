@@ -260,14 +260,9 @@ public class Library {
 	}
 
 	public static DeviceTracker createDeviceTracker() {
-		DeviceList deviceList = DeviceList.query();
-		if (CallbackDeviceTracker.isSupported()) {
-			LOGGER.debug("Using SOFT_system_events callback for tracking audio device changes");
-			return CallbackDeviceTracker.createAndInstall(deviceList);
-		} else {
-			LOGGER.debug("Using polling for tracking audio device changes");
-			return new PollingDeviceTracker(deviceList);
-		}
+		// CallbackDeviceTracker is disabled, a thread attached by the FFM upcall deadlocks System.exit on JDK < 28 (JDK-8391662)
+		LOGGER.debug("Using polling for tracking audio device changes");
+		return new PollingDeviceTracker(DeviceList.query());
 	}
 
 	@Environment(EnvType.CLIENT)
