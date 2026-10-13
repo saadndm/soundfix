@@ -73,6 +73,14 @@ public class ChannelAccess {
 		});
 	}
 
+	public void release(ChannelAccess.ChannelHandle channelHandle) {
+		this.executor.execute(() -> {
+			if (this.channels.remove(channelHandle)) {
+				channelHandle.release();
+			}
+		});
+	}
+
 	public void clear() {
 		this.channels.forEach(ChannelAccess.ChannelHandle::release);
 		this.channels.clear();

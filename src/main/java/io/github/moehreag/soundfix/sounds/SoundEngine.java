@@ -545,12 +545,18 @@ public class SoundEngine {
 										this.soundBuffers.getCompleteBuffer(sound2.getLocation()).thenAccept(buffer -> channelHandle.execute(channel -> {
 											channel.attachStaticBuffer(buffer);
 											channel.play();
-										}));
+										})).exceptionally(throwable -> {
+											this.channelAccess.release(channelHandle);
+											return null;
+										});
 									} else {
 										this.soundBuffers.getStream(sound2.getLocation(), bl2).thenAccept(audioStream -> channelHandle.execute(channel -> {
 											channel.attachBufferStream(audioStream);
 											channel.play();
-										}));
+										})).exceptionally(throwable -> {
+											this.channelAccess.release(channelHandle);
+											return null;
+										});
 									}
 
 									if (sound instanceof TickableSoundInstance) {

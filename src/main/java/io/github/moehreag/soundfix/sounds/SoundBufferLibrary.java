@@ -15,12 +15,15 @@ import net.fabricmc.api.Environment;
 import net.minecraft.client.resource.manager.ResourceManager;
 import net.minecraft.client.sound.Sound;
 import net.minecraft.resource.Identifier;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  * The {@linkplain SoundBufferLibrary} class provides a cache containing instances of {@linkplain SoundBuffer} and {@linkplain AudioStream} for use in Minecraft sound handling.
  */
 @Environment(EnvType.CLIENT)
 public class SoundBufferLibrary {
+	private static final Logger LOGGER = LogManager.getLogger("SoundBufferLibrary");
 	/**
 	 * The {@linkplain ResourceManager} used for loading sound resources.
 	 */
@@ -45,7 +48,7 @@ public class SoundBufferLibrary {
 			} catch (IOException var10) {
 				throw new CompletionException(var10);
 			}
-		}, SoundFix.SOUND));
+		}, SoundFix.SOUND).whenComplete((buffer, throwable) -> logFailure(resourceLocation, throwable)));
 	}
 
 	/**
@@ -62,7 +65,13 @@ public class SoundBufferLibrary {
 			} catch (IOException var4) {
 				throw new CompletionException(var4);
 			}
-		}, SoundFix.SOUND);
+		}, SoundFix.SOUND).whenComplete((stream, throwable) -> logFailure(resourceLocation, throwable));
+	}
+
+	private static void logFailure(Identifier resourceLocation, Throwable throwable) {
+		if (throwable != null) {
+			LOGGER.error("Failed to load sound {}", resourceLocation, throwable);
+		}
 	}
 
 	/**
