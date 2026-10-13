@@ -367,6 +367,12 @@ public class SoundEngine {
 						channel.setPitch(g);
 						channel.setSelfPosition(vec3);
 					});
+					if (tickableSoundInstance.isLooping() && this.tickCount % 10 == 0 && f > 0.0F && !this.listeners.isEmpty()) {
+						SoundPool soundPool = this.soundManager.get(tickableSoundInstance.getLocation());
+						if (soundPool != null) {
+							this.notifyListeners(tickableSoundInstance, soundPool, Math.max(tickableSoundInstance.getVolume(), 1.0F) * 16);
+						}
+					}
 				}
 			}
 		}
@@ -498,18 +504,15 @@ public class SoundEngine {
 						float h = this.calculateVolume(f * (float) sound2.getVolume(), soundSource);
 						float i = this.calculatePitch(sound, sound2);
 						SoundInstance.Attenuation attenuation = sound.getAttenuationType();
-						boolean bl = soundSource == SoundCategory.MASTER || soundSource == SoundCategory.MUSIC;//sound.isRelative();
+						boolean bl = isRelative(soundSource);//sound.isRelative();
+						if (!this.listeners.isEmpty()) {
+							this.notifyListeners(sound, weighedSoundEvents, g);
+						}
+
 						if (h == 0.0F /*&& !sound.canStartSilent()*/) {
 							LOGGER.debug(MARKER, "Skipped playing sound {}, volume was zero.", new Object[]{sound2.getLocation()});
 						} else {
 							Vec3d vec3 = new Vec3d(sound.getX(), sound.getY(), sound.getZ());
-							if (!this.listeners.isEmpty()) {
-								float j = !bl && attenuation != SoundInstance.Attenuation.NONE ? g : Float.POSITIVE_INFINITY;
-								for (SoundEventListener soundEventListener : this.listeners) {
-									soundEventListener.onPlaySound(sound, weighedSoundEvents, j);
-								}
-							}
-
 							if (this.listener.getGain() <= 0.0F) {
 								LOGGER.debug(MARKER, "Skipped playing soundEvent: {}, master volume was zero", new Object[]{resourceLocation});
 							} else {
@@ -586,6 +589,18 @@ public class SoundEngine {
 	 */
 	public void requestPreload(Sound sound) {
 		this.preloadQueue.add(sound);
+	}
+
+	private void notifyListeners(SoundInstance sound, SoundPool soundPool, float attenuationDistance) {
+		float range = !isRelative(soundPool.getCategory()) && sound.getAttenuationType() != SoundInstance.Attenuation.NONE ? attenuationDistance : Float.POSITIVE_INFINITY;
+
+		for (SoundEventListener soundEventListener : this.listeners) {
+			soundEventListener.onPlaySound(sound, soundPool, range);
+		}
+	}
+
+	private static boolean isRelative(SoundCategory category) {
+		return category == SoundCategory.MASTER || category == SoundCategory.MUSIC;
 	}
 
 	/**

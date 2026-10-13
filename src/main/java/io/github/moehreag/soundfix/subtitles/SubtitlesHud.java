@@ -30,6 +30,7 @@ public class SubtitlesHud extends GuiElement implements SoundEventListener {
 	private static final Logger LOGGER = LogManager.getLogger("Subtitles");
 	private static final Identifier SUBTITLES = new Identifier("soundfix", "subtitles.json");
 
+	private static final int LOOPING_DISPLAY_FULL_BRIGHTNESS_TIME = 500;
 	private static final long DISPLAY_TIME = 3000L;
 	private final Minecraft minecraft = Minecraft.getInstance();
 	private final Map<String, String> soundSubtitles = new HashMap<>();
@@ -66,30 +67,23 @@ public class SubtitlesHud extends GuiElement implements SoundEventListener {
 			Vec3d pos = listenerTransform.position();
 			Vec3d fw = listenerTransform.forward();
 			Vec3d right = listenerTransform.right();
+			double d = notificationDisplayTime;
 			this.audibleSubtitles.clear();
+			int maxWidth = 0;
 
 			for (Subtitle subtitle : this.subtitles) {
-				if (subtitle.isAudibleFrom(pos)) {
+				if (subtitle.isStillActive()) {
+					subtitle.purgeOldInstances(DISPLAY_TIME * d);
+				}
+
+				if (subtitle.isAudibleFrom(pos) && subtitle.isStillActive()) {
 					this.audibleSubtitles.add(subtitle);
+					maxWidth = Math.max(maxWidth, this.minecraft.textRenderer.getWidth(subtitle.getText()));
 				}
 			}
 
 			if (!this.audibleSubtitles.isEmpty()) {
 				int index = 0;
-				int maxWidth = 0;
-				double d = notificationDisplayTime;
-				Iterator<Subtitle> iterator = this.audibleSubtitles.iterator();
-
-				while (iterator.hasNext()) {
-					Subtitle subtitle2 = iterator.next();
-					subtitle2.purgeOldInstances(DISPLAY_TIME * d);
-					if (!subtitle2.isStillActive()) {
-						iterator.remove();
-					} else {
-						maxWidth = Math.max(maxWidth, this.minecraft.textRenderer.getWidth(subtitle2.getText()));
-					}
-				}
-
 				maxWidth += this.minecraft.textRenderer.getWidth("<") + this.minecraft.textRenderer.getWidth(" ") * 2 + this.minecraft.textRenderer.getWidth(">");
 
 				Window window = new Window(minecraft);
@@ -100,7 +94,7 @@ public class SubtitlesHud extends GuiElement implements SoundEventListener {
 				GlStateManager.translated(window.getScaledWidth() - halfWidth - 2.0F, window.getScaledHeight() - 35, 0.0F);
 				for (Subtitle subtitle2 : this.audibleSubtitles) {
 					String component = subtitle2.getText();
-					SoundPlayedAt soundPlayedAt = subtitle2.getClosest(pos);
+					SoundPlayedAt soundPlayedAt = subtitle2.getBestSubtitleCandidate(pos);
 					if (soundPlayedAt != null) {
 						Vec3d relativePos = soundPlayedAt.location.subtract(pos).normalize();
 						double e = right.dot(relativePos);
@@ -108,7 +102,7 @@ public class SubtitlesHud extends GuiElement implements SoundEventListener {
 						boolean bl = f > 0.5;
 						float scale = 1.0F;
 						int o = this.minecraft.textRenderer.getWidth(component);
-						int color = MathHelper.floor(MathHelper.clampedLerp(255.0F, 75.0F, (float) (System.currentTimeMillis() - soundPlayedAt.time) / (float) (DISPLAY_TIME * d)));
+						int color = subtitle2.getBrightness(soundPlayedAt, d);
 						GlStateManager.pushMatrix();
 						GlStateManager.translated(0, -(index * (lineHeight + 1)), 0.0F);
 						GlStateManager.scalef(scale, scale, scale);
@@ -159,7 +153,7 @@ public class SubtitlesHud extends GuiElement implements SoundEventListener {
 				}
 			}
 
-			this.subtitles.add(new Subtitle(component, range, new Vec3d(sound.getX(), sound.getY(), sound.getZ())));
+			this.subtitles.add(new Subtitle(component, range, new Vec3d(sound.getX(), sound.getY(), sound.getZ()), sound.isLooping()));
 		}
 	}
 
@@ -170,11 +164,18 @@ public class SubtitlesHud extends GuiElement implements SoundEventListener {
 		private final String text;
 		private final float range;
 		private final List<SoundPlayedAt> playedAt = new ArrayList<>();
+		private final boolean looping;
 
-		public Subtitle(String text, float range, Vec3d location) {
+		public Subtitle(String text, float range, Vec3d location, boolean looping) {
 			this.text = text;
 			this.range = range;
+			this.looping = looping;
 			this.playedAt.add(new SoundPlayedAt(location, System.currentTimeMillis()));
+		}
+
+		private int getBrightness(SoundPlayedAt closestRecentLocation, double displayTimeMultiplier) {
+			int displayFullBrightnessTime = this.looping ? LOOPING_DISPLAY_FULL_BRIGHTNESS_TIME : 0;
+			return MathHelper.floor(MathHelper.clampedLerp(255.0F, 75.0F, (float) Math.max(0L, System.currentTimeMillis() - closestRecentLocation.time - displayFullBrightnessTime) / (float) ((DISPLAY_TIME - displayFullBrightnessTime) * displayTimeMultiplier)));
 		}
 
 		public String getText() {
@@ -182,7 +183,7 @@ public class SubtitlesHud extends GuiElement implements SoundEventListener {
 		}
 
 		@Nullable
-		public SoundPlayedAt getClosest(Vec3d location) {
+		public SoundPlayedAt getBestSubtitleCandidate(Vec3d location) {
 			if (this.playedAt.isEmpty()) {
 				return null;
 			} else {
@@ -190,7 +191,8 @@ public class SubtitlesHud extends GuiElement implements SoundEventListener {
 					? this.playedAt.get(0)
 					: this.playedAt
 					.stream()
-					.min(Comparator.comparingDouble(soundPlayedAt -> soundPlayedAt.location().distanceTo(location)))
+					.filter(soundPlayedAt -> closerThan(soundPlayedAt.location(), location, this.range))
+					.max(Comparator.comparingLong(SoundPlayedAt::time).thenComparingDouble(soundPlayedAt -> soundPlayedAt.location().distanceTo(location)))
 					.orElse(null);
 			}
 		}
@@ -206,7 +208,7 @@ public class SubtitlesHud extends GuiElement implements SoundEventListener {
 			} else if (this.playedAt.isEmpty()) {
 				return false;
 			} else {
-				var soundPlayedAt = this.getClosest(location);
+				var soundPlayedAt = this.getBestSubtitleCandidate(location);
 				return soundPlayedAt != null && closerThan(location, soundPlayedAt.location, this.range);
 			}
 		}
