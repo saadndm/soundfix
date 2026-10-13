@@ -374,11 +374,7 @@ public class SoundEngine {
 			Entry<SoundInstance, ChannelAccess.ChannelHandle> entry = iterator.next();
 			ChannelAccess.ChannelHandle channelHandle2 = entry.getValue();
 			SoundInstance soundInstance = entry.getKey();
-			float h = this.options.getSoundCategoryVolume(soundManager.get(soundInstance.getLocation()).getCategory());
-			if (h <= 0.0F) {
-				channelHandle2.execute(Channel::stop);
-				iterator.remove();
-			} else if (channelHandle2.isStopped()) {
+			if (channelHandle2.isStopped()) {
 				int i = this.soundDeleteTime.get(soundInstance);
 				if (i <= this.tickCount) {
 					if (shouldLoopManually(soundInstance)) {
