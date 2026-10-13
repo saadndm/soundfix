@@ -610,7 +610,7 @@ public class SoundEngine {
 	 * Clamps the sound between 0.0f and 1.0f.
 	 */
 	private float calculateVolume(float volumeMultiplier, SoundCategory source) {
-		return MathHelper.clamp(volumeMultiplier * this.getVolume(source), 0.0F, 1.0F);
+		return MathHelper.clamp(volumeMultiplier, 0.0F, 1.0F) * this.getVolume(source);
 	}
 
 	/**
