@@ -17,7 +17,7 @@ public class Engine extends SoundEngine {
 
 	public Engine(SoundManager manager, GameOptions options) {
 		super(manager, options);
-		engine = new io.github.moehreag.soundfix.sounds.SoundEngine(manager, options, Minecraft.getInstance().getResourceManager());
+		engine = new io.github.moehreag.soundfix.sounds.SoundEngine(this, manager, options, Minecraft.getInstance().getResourceManager());
 		SoundFix.engine = engine;
 	}
 
@@ -54,11 +54,6 @@ public class Engine extends SoundEngine {
 	@Override
 	public void stop(SoundInstance sound) {
 		engine.stop(sound);
-	}
-
-	@Override
-	public void play(SoundInstance sound1) {
-		engine.play(sound1);
 	}
 
 	@Override

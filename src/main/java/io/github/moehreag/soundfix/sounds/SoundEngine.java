@@ -9,6 +9,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 import com.google.common.collect.*;
+import io.github.moehreag.soundfix.Engine;
 import io.github.moehreag.soundfix.SoundFix;
 import io.github.moehreag.soundfix.b3d_audio.Channel;
 import io.github.moehreag.soundfix.b3d_audio.DeviceList;
@@ -58,6 +59,7 @@ public class SoundEngine {
 	public static final String MISSING_SOUND = "FOR THE DEBUG!";
 	public static final String OPEN_AL_SOFT_PREFIX = "OpenAL Soft on ";
 	public static final int OPEN_AL_SOFT_PREFIX_LENGTH = "OpenAL Soft on ".length();
+	private final Engine vanillaEngine;
 	/**
 	 * A reference to the sound handler.
 	 */
@@ -103,7 +105,8 @@ public class SoundEngine {
 	private final List<TickableSoundInstance> queuedTickableSounds = Lists.newArrayList();
 	private final List<Sound> preloadQueue = Lists.newArrayList();
 
-	public SoundEngine(SoundManager soundManager, GameOptions options, ResourceManager resourceManager) {
+	public SoundEngine(Engine vanillaEngine, SoundManager soundManager, GameOptions options, ResourceManager resourceManager) {
+		this.vanillaEngine = vanillaEngine;
 		this.soundManager = soundManager;
 		this.options = options;
 		this.soundBuffers = new SoundBufferLibrary(resourceManager);
@@ -417,7 +420,7 @@ public class SoundEngine {
 					((TickableSoundInstance) soundInstance).tick();
 				}
 
-				this.play(soundInstance);
+				this.vanillaEngine.play(soundInstance);
 				iterator2.remove();
 			}
 		}
