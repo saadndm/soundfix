@@ -15,12 +15,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class GameOptionsMixin {
 
 	@Inject(method = "load", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/sound/SoundCategory;values()[Lnet/minecraft/client/sound/SoundCategory;"))
-	private void loadAdditionalOptions(CallbackInfo ci, @Local String[] strings) {
+	private void loadAdditionalOptions(CallbackInfo ci, @Local(ordinal = 0) String line, @Local String[] strings) {
 		if ("soundDevice".equals(strings[0])) {
-			if ("\"\"".equals(strings[1])) {
+			String device = line.substring(line.indexOf(':') + 1);
+			if ("\"\"".equals(device)) {
 				SoundFix.currentOutputDevice = "";
 			} else {
-				SoundFix.currentOutputDevice = strings[1];
+				SoundFix.currentOutputDevice = device;
 			}
 		} else if ("directionalAudio".equals(strings[0])) {
 			SoundFix.hrtfEnabled = "true".equals(strings[1]);
