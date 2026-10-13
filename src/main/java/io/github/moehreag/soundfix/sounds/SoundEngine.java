@@ -4,13 +4,15 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicReference;
 
 import com.google.common.collect.*;
 import io.github.moehreag.soundfix.SoundFix;
 import io.github.moehreag.soundfix.b3d_audio.Channel;
+import io.github.moehreag.soundfix.b3d_audio.DeviceList;
+import io.github.moehreag.soundfix.b3d_audio.DeviceTracker;
 import io.github.moehreag.soundfix.b3d_audio.Library;
 import io.github.moehreag.soundfix.b3d_audio.Listener;
 import io.github.moehreag.soundfix.b3d_audio.ListenerTransform;
@@ -53,10 +55,6 @@ public class SoundEngine {
 	 * A set of resource locations for which a missing sound warning has been issued
 	 */
 	private static final Set<Identifier> ONLY_WARN_ONCE = Sets.newHashSet();
-	/**
-	 * The default interval in milliseconds for checking the audio device state
-	 */
-	private static final long DEFAULT_DEVICE_CHECK_INTERVAL_MS = 1000L;
 	public static final String MISSING_SOUND = "FOR THE DEBUG!";
 	public static final String OPEN_AL_SOFT_PREFIX = "OpenAL Soft on ";
 	public static final int OPEN_AL_SOFT_PREFIX_LENGTH = "OpenAL Soft on ".length();
@@ -84,11 +82,8 @@ public class SoundEngine {
 	 * A counter for how long the sound manager has been running
 	 */
 	private int tickCount;
-	private long lastDeviceCheckTime;
-	/**
-	 * The current state of the audio device check
-	 */
-	private final AtomicReference<SoundEngine.DeviceCheckState> devicePoolState = new AtomicReference<>(SoundEngine.DeviceCheckState.NO_CHANGE);
+	private DeviceList lastSeenDevices;
+	private final DeviceTracker deviceTracker = Library.createDeviceTracker();
 	private final Map<SoundInstance, ChannelAccess.ChannelHandle> instanceToChannel = Maps.newHashMap();
 	private final Multimap<SoundCategory, SoundInstance> instanceBySource = HashMultimap.create();
 	/**
@@ -111,6 +106,7 @@ public class SoundEngine {
 		this.soundManager = soundManager;
 		this.options = options;
 		this.soundBuffers = new SoundBufferLibrary(resourceManager);
+		this.lastSeenDevices = this.deviceTracker.currentDevices();
 	}
 
 	/**
@@ -143,7 +139,8 @@ public class SoundEngine {
 		if (!this.loaded) {
 			try {
 				String device = SoundFix.currentOutputDevice;
-				this.library.init(device.isEmpty() ? null : device, SoundFix.hrtfEnabled);
+				DeviceList currentDevices = this.deviceTracker.currentDevices();
+				this.library.init(device.isEmpty() ? null : device, currentDevices, SoundFix.hrtfEnabled);
 				this.listener.reset();
 				this.listener.setGain(this.options.getSoundCategoryVolume(SoundCategory.MASTER));
 				this.soundBuffers.preload(this.preloadQueue).thenRun(this.preloadQueue::clear);
@@ -262,50 +259,48 @@ public class SoundEngine {
 	 * <p>
 	 * If the current audio device is disconnected, an informational message is logged, and this method returns {@code true} to indicate a change is needed.
 	 * <p>
-	 * Otherwise, the elapsed time since the last device check is examined.
-	 * If the elapsed time is greater than or equal to 1000 milliseconds, the device check is performed.
-	 * <p>
-	 * During the device check, the current device state is compared with the preferred sound device specified in the options.
+	 * Otherwise, the device tracker is ticked, and if the list of audio devices has changed since the last check:
 	 * <ul>
-	 *   <li>If the preferred sound device is an empty string and the system default audio device has changed, an informational message is logged, and the device pool state is set to indicate a change has been detected.</li>
-	 *   <li>If the preferred sound device is not an empty string, it is checked whether the current device name is different from the preferred device name and if the preferred device is available in the list of available sound devices. </li>
-	 *   <li>If both conditions are true, an informational message is logged, and the device pool state is set to indicate a change has been detected.</li>
+	 *   <li>If the current device is no longer available, a change is needed.</li>
+	 *   <li>If the preferred sound device is the system default and the system default audio device has changed, a change is needed.</li>
+	 *   <li>If a specific preferred sound device is selected, is not the current device, and has become available, a change is needed.</li>
 	 * </ul>
-	 * <p>
-	 * Finally, the device pool state is set to indicate that the device check is complete.
-	 * <p>
 	 *
 	 * @return {@code true} if a change in the audio device is needed, {@code false} otherwise.
 	 */
 	private boolean shouldChangeDevice() {
 		if (this.library.isCurrentDeviceDisconnected()) {
 			LOGGER.info("Audio device was lost!");
+			this.deviceTracker.forceRefresh();
 			return true;
-		} else {
-			long l = Minecraft.getTime();
-			boolean bl = l - this.lastDeviceCheckTime >= DEFAULT_DEVICE_CHECK_INTERVAL_MS;
-			if (bl) {
-				this.lastDeviceCheckTime = l;
-				if (this.devicePoolState.compareAndSet(SoundEngine.DeviceCheckState.NO_CHANGE, SoundEngine.DeviceCheckState.ONGOING)) {
-					String string = SoundFix.currentOutputDevice;
-					SoundFix.IO.execute(() -> {
-						if ("".equals(string)) {
-							if (this.library.hasDefaultDeviceChanged()) {
-								LOGGER.info("System default audio device has changed!");
-								this.devicePoolState.compareAndSet(SoundEngine.DeviceCheckState.ONGOING, SoundEngine.DeviceCheckState.CHANGE_DETECTED);
-							}
-						} else if (!this.library.currentDeviceName().equals(string) && this.library.getAvailableSoundDevices().contains(string)) {
-							LOGGER.info("Preferred audio device has become available!");
-							this.devicePoolState.compareAndSet(SoundEngine.DeviceCheckState.ONGOING, SoundEngine.DeviceCheckState.CHANGE_DETECTED);
-						}
+		}
 
-						this.devicePoolState.compareAndSet(SoundEngine.DeviceCheckState.ONGOING, SoundEngine.DeviceCheckState.NO_CHANGE);
-					});
-				}
+		this.deviceTracker.tick();
+		boolean shouldChangeDevice = false;
+		DeviceList currentDevices = this.deviceTracker.currentDevices();
+		if (!currentDevices.equals(this.lastSeenDevices)) {
+			String currentDeviceName = this.library.currentDeviceName();
+			if (!currentDevices.allDevices().contains(currentDeviceName)) {
+				LOGGER.info("Current audio device has disappeared!");
+				shouldChangeDevice = true;
 			}
 
-			return this.devicePoolState.compareAndSet(SoundEngine.DeviceCheckState.CHANGE_DETECTED, SoundEngine.DeviceCheckState.NO_CHANGE);
+			String userSelectedDevice = SoundFix.currentOutputDevice;
+			if (userSelectedDevice.isEmpty()) {
+				String newDefault = currentDevices.defaultDevice();
+				if (!Objects.equals(currentDeviceName, newDefault)) {
+					LOGGER.info("System default audio device has changed!");
+					shouldChangeDevice = true;
+				}
+			} else if (!Objects.equals(currentDeviceName, userSelectedDevice) && currentDevices.allDevices().contains(userSelectedDevice)) {
+				LOGGER.info("Preferred audio device has become available!");
+				shouldChangeDevice = true;
+			}
+
+			this.lastSeenDevices = currentDevices;
 		}
+
+		return shouldChangeDevice;
 	}
 
 	/**
@@ -670,17 +665,10 @@ public class SoundEngine {
 	}
 
 	public List<String> getAvailableSoundDevices() {
-		return this.library.getAvailableSoundDevices();
+		return this.deviceTracker.currentDevices().allDevices();
 	}
 
 	public ListenerTransform getListenerTransform() {
 		return this.listener.getTransform();
-	}
-
-	@Environment(EnvType.CLIENT)
-	enum DeviceCheckState {
-		ONGOING,
-		CHANGE_DETECTED,
-		NO_CHANGE
 	}
 }

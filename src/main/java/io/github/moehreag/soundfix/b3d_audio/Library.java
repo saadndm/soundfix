@@ -22,8 +22,6 @@ public class Library {
 	private long currentDevice;
 	private long context;
 	private boolean supportsDisconnections;
-	@Nullable
-	private String defaultDeviceName;
 	private String currentDeviceName = NO_DEVICE_NAME;
 	private static final Library.ChannelPool EMPTY = new Library.ChannelPool() {
 		@Nullable
@@ -55,20 +53,17 @@ public class Library {
 	private Library.ChannelPool streamingChannels = EMPTY;
 	private final Listener listener = new Listener();
 
-	public Library() {
-		this.defaultDeviceName = getDefaultDeviceName();
-	}
-
 	/**
 	 * Initializes the OpenAL device and context.
 	 *
 	 * @param deviceSpecifier A string specifying the name of the audio device to use, or null to use the default device.
+	 * @param currentDevices  The currently known audio devices.
 	 * @param enableHrtf      Whether to enable HRTF (head-related transfer function) for spatial audio.
 	 * @throws IllegalStateException if an error occurs during initialization.
 	 */
-	public void init(@Nullable String deviceSpecifier, boolean enableHrtf) {
+	public void init(@Nullable String deviceSpecifier, DeviceList currentDevices, boolean enableHrtf) {
 		currentDeviceName = NO_DEVICE_NAME;
-		this.currentDevice = openDeviceOrFallback(deviceSpecifier, getDefaultDeviceName());
+		this.currentDevice = openDeviceOrFallback(deviceSpecifier, currentDevices.defaultDevice());
 		currentDeviceName = queryDeviceName(this.currentDevice);
 		this.supportsDisconnections = false;
 		ALCCapabilities aLCCapabilities = ALC.createCapabilities(this.currentDevice);
@@ -169,32 +164,6 @@ public class Library {
 		return currentDeviceName;
 	}
 
-	/**
-	 * Checks if the default audio device has changed since the last time this method was called.
-	 * <p>
-	 * If the default device has changed, updates the stored default device name accordingly.
-	 *
-	 * @return {@code true} if the default device has changed since the last time this method was called, {@code false} otherwise
-	 */
-	public synchronized boolean hasDefaultDeviceChanged() {
-		String string = getDefaultDeviceName();
-		if (Objects.equals(this.defaultDeviceName, string)) {
-			return false;
-		} else {
-			this.defaultDeviceName = string;
-			return true;
-		}
-	}
-
-	public static String getDefaultDeviceName() {
-		if (!ALC10.alcIsExtensionPresent(0L, "ALC_ENUMERATE_ALL_EXT")) {
-			return null;
-		} else {
-			ALUtil.getStringList(0L, 4115);
-			return ALC10.alcGetString(0L, 4114);
-		}
-	}
-
 	private static String queryDeviceName(final long deviceId) {
 		String name = ALC10.alcGetString(deviceId, 4115);
 		if (name == null) {
@@ -208,13 +177,13 @@ public class Library {
 		return name;
 	}
 
-	private static long openDeviceOrFallback(@Nullable String preferredDevice, String systemDefault) {
+	private static long openDeviceOrFallback(@Nullable String preferredDevice, @Nullable String systemDefault) {
 		OptionalLong optionalLong = OptionalLong.empty();
 		if (preferredDevice != null) {
 			optionalLong = tryOpenDevice(preferredDevice);
 		}
 
-		if (optionalLong.isEmpty()) {
+		if (optionalLong.isEmpty() && systemDefault != null) {
 			optionalLong = tryOpenDevice(systemDefault);
 		}
 
@@ -286,16 +255,19 @@ public class Library {
 		);
 	}
 
-	/**
-	 * {@return A list of strings representing the names of available sound devices, or an empty list if no devices are available.}
-	 */
-	public List<String> getAvailableSoundDevices() {
-		List<String> list = ALUtil.getStringList(0L, 4115);
-		return list == null ? Collections.emptyList() : list;
-	}
-
 	public boolean isCurrentDeviceDisconnected() {
 		return this.supportsDisconnections && ALC11.alcGetInteger(this.currentDevice, 787) == 0;
+	}
+
+	public static DeviceTracker createDeviceTracker() {
+		DeviceList deviceList = DeviceList.query();
+		if (CallbackDeviceTracker.isSupported()) {
+			LOGGER.debug("Using SOFT_system_events callback for tracking audio device changes");
+			return CallbackDeviceTracker.createAndInstall(deviceList);
+		} else {
+			LOGGER.debug("Using polling for tracking audio device changes");
+			return new PollingDeviceTracker(deviceList);
+		}
 	}
 
 	@Environment(EnvType.CLIENT)
