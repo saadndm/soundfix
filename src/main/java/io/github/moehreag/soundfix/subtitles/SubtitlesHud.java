@@ -38,6 +38,7 @@ public class SubtitlesHud extends GuiElement implements SoundEventListener {
 	private boolean isListening;
 	private final List<Subtitle> audibleSubtitles = new ArrayList<>();
 	public boolean showSubtitles;
+	public boolean breakingBlock;
 	public float notificationDisplayTime = 1;
 
 	private static final SubtitlesHud instance = new SubtitlesHud();
@@ -143,7 +144,7 @@ public class SubtitlesHud extends GuiElement implements SoundEventListener {
 	@Override
 	public void onPlaySound(SoundInstance sound, SoundPool accessor, float range) {
 		if (soundSubtitles.containsKey(accessor.getLocation().getPath())) {
-			String component = I18n.translate(soundSubtitles.get(accessor.getLocation().getPath()));
+			String component = I18n.translate(breakingBlock ? "subtitles.block.generic.break" : soundSubtitles.get(accessor.getLocation().getPath()));
 			if (!this.subtitles.isEmpty()) {
 				for (Subtitle subtitle : this.subtitles) {
 					if (subtitle.getText().equals(component)) {
