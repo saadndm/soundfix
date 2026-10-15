@@ -12,8 +12,10 @@ import net.minecraft.util.math.Vec3d;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.Nullable;
+import org.lwjgl.openal.AL;
 import org.lwjgl.openal.AL10;
 import org.lwjgl.openal.AL11;
+import org.lwjgl.openal.SOFTSourceSpatialize;
 
 /**
  * Represents an OpenAL audio channel.
@@ -176,7 +178,10 @@ public class Channel {
 		AL10.alSourcef(this.source, AL10.AL_MAX_DISTANCE, linearAttenuation);
 		AL10.alSourcef(this.source, AL10.AL_ROLLOFF_FACTOR, 1.0F);
 		AL10.alSourcef(this.source, AL10.AL_REFERENCE_DISTANCE, 0.0F);
-
+		// stereo sounds aren't faded or positioned unless spatialization is forced
+		if (AL.getCapabilities().AL_SOFT_source_spatialize) {
+			AL10.alSourcei(this.source, SOFTSourceSpatialize.AL_SOURCE_SPATIALIZE_SOFT, AL10.AL_TRUE);
+		}
 	}
 
 	/**
