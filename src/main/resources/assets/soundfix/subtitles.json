@@ -45,6 +45,7 @@
   "liquid.lavapop": "subtitles.block.lava.ambient",
   "liquid.water": "subtitles.block.water.ambient",
   "minecart.base": "subtitles.entity.minecart.riding",
+  "minecart.inside": "subtitles.entity.minecart.inside",
   "mob.bat.death": "subtitles.entity.bat.death",
   "mob.bat.hurt": "subtitles.entity.bat.hurt",
   "mob.bat.idle": "subtitles.entity.bat.ambient",
